@@ -1,0 +1,1083 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  
+  // Security and permissions
+  role          String    @default("user") // master, admin, user
+  permissions   String?   @db.Text // JSON string of permissions array
+  isActive      Boolean   @default(true)
+  
+  // Two-factor authentication
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+  
+  // Password security
+  passwordChangedAt   DateTime?
+  passwordExpiresAt   DateTime? // 90 days from password change
+  forcePasswordChange Boolean   @default(false)
+  passwordHistory     String?   @db.Text // JSON array of last 5 password hashes
+  
+  // Account lockout
+  failedLoginAttempts Int      @default(0)
+  lockedUntil         DateTime?
+
+  // Password reset
+  resetToken        String?   @db.Text
+  resetTokenExpiry  DateTime?
+  
+  // Calendar subscription
+  calendarToken     String?   @unique
+  
+  accounts      Account[]
+  sessions      Session[]
+  proposals     Proposal[]
+  layoutConfigs LayoutConfig[]
+  loginHistory  LoginHistory[]
+  auditLogs     AuditLog[]
+  teamMember    TeamMember?
+  emailNotificationConfig EmailNotificationConfig?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([email])
+  @@index([role])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Service {
+  id          String            @id @default(cuid())
+  title       String
+  description String            @db.Text
+  price       Decimal           @db.Decimal(10, 2)
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  proposalServices ProposalService[]
+
+  @@index([title])
+}
+
+model Proposal {
+  id              String            @id @default(cuid())
+  proposalNumber  String            @unique
+  proposalCode    String?           // Código customizado da proposta
+  demandName      String?           // Nome da demanda (ex: "Embalagens 2026")
+  
+  // Client data
+  clientName      String
+  clientEmail     String
+  clientCNPJ      String?           // CNPJ do cliente
+  clientAddress   String?           @db.Text  // Endereço completo do cliente
+  responsibleName String
+  clientWhatsapp  String
+  
+  // Financial data
+  subtotal        Decimal           @db.Decimal(10, 2)
+  markupPercent   Decimal?          @db.Decimal(5, 2)  // Percentual de aumento sobre os valores
+  discountType    String?           // 'percentage' or 'fixed'
+  discountValue   Decimal?          @db.Decimal(10, 2)
+  tax             Decimal           @default(0) @db.Decimal(10, 2)  // Imposto de 12% sobre subtotal
+  taxExempt       Boolean           @default(false)  // Isento de impostos (pagamento à vista)
+  total           Decimal           @db.Decimal(10, 2)
+  
+  // Version control
+  version         Int               @default(1)  // Versão da proposta (V1, V2, V3...)
+  
+  // Parcelamento
+  installments    Int?              // Número de parcelas
+  installmentDay  Int?              // Dia de vencimento (1-31)
+  
+  // Additional information
+  observations    String?           @db.Text
+  paymentTerms    String?           @db.Text
+  
+  // Status and dates
+  status          String            @default("pending") // pending, approved, rejected, expired, change_requested
+  internalStatus  String            @default("pending") // pending, approved, rejected (controle interno da empresa)
+  validUntil      DateTime
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  // Client response
+  accessToken     String?           @unique  // Token único para acesso público
+  clientResponse  String?           // approved, rejected, change_requested
+  clientFeedback  String?           @db.Text  // Feedback quando solicita alteração
+  
+  // Cover image
+  coverImage      String?           // Cloud storage path para capa personalizada A4
+  
+  // Contract generation
+  contractGenerated Boolean         @default(false)
+  contractPath    String?           // Cloud storage path do contrato gerado
+  contractGeneratedAt DateTime?     // Data/hora da geração do contrato
+  
+  // Contract specific fields
+  contractForumCity     String?     // Cidade do foro (ex: São Paulo)
+  contractForumState    String?     // Estado do foro (ex: SP)
+  contractSignatureDate DateTime?   // Data de assinatura do contrato
+  contractSignatureMethod String?   // Método de assinatura: 'govbr' ou 'platform'
+  contractSignaturePlatform String? // Plataforma de assinatura digital (Clicksign, DocuSign, etc.) - usado apenas se method != 'govbr'
+  contractEmailForSignature String? // Email para envio do contrato para assinatura
+  contractResponsibleUser   String? // Usuário responsável pela geração do contrato
+  
+  // Dados do representante legal (para o contrato)
+  representativeName      String?   // Nome do representante legal
+  representativeNationality String? // Nacionalidade
+  representativeMaritalStatus String? // Estado civil
+  representativeProfession String?  // Profissão
+  representativeCPF       String?   // CPF do representante
+  representativeRG        String?   // RG do representante
+  
+  // Relations
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  services        ProposalService[]
+  installments_financial Installment[]  // Parcelas financeiras
+  creativeJobs    CreativeJob[]  // Jobs criativos vinculados
+
+  @@index([proposalNumber])
+  @@index([clientName])
+  @@index([createdAt])
+}
+
+model ProposalService {
+  id          String   @id @default(cuid())
+  proposalId  String
+  serviceId   String
+  quantity    Int      @default(1)
+  customPrice Decimal? @db.Decimal(10, 2)
+  
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  service     Service  @relation(fields: [serviceId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([proposalId, serviceId])
+  @@index([proposalId])
+  @@index([serviceId])
+}
+
+model LayoutConfig {
+  id              String   @id @default(cuid())
+  userId          String
+  
+  // Imagens
+  logoPath        String?  // Logo principal (cloud storage path)
+  miniLogoPath    String?  // Logo mini para páginas internas
+  coverImagePath  String?  // Imagem de capa padrão
+  
+  // Tamanhos de fonte
+  headerFontSize      Int   @default(22)
+  sectionFontSize     Int   @default(15)
+  normalFontSize      Int   @default(13)
+  introFontSize       Int   @default(14)
+  footerFontSize      Int   @default(9)
+  
+  // Espaçamentos
+  introLineSpacing    Int   @default(8)
+  persuasiveSpacing   Int   @default(8)
+  normalSpacing       Int   @default(7)
+  
+  // Cores (RGB em string "r,g,b")
+  primaryColor        String @default("248,137,16")  // Laranja Defoco
+  
+  // Textos customizáveis
+  footerText1         String?
+  footerText2         String?
+  footerWebsite       String @default("www.defoco.com.br")
+  footerInstagram     String @default("Instagram: https://www.instagram.com/defoco/")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customPages CustomPage[]
+
+  @@index([userId])
+}
+
+model CustomPage {
+  id              String   @id @default(cuid())
+  layoutConfigId  String
+  imagePath       String   // Cloud storage path da imagem de propaganda
+  pagePosition    Int      // Posição da página no PDF (1 = após capa, 2 = segunda página após capa, etc.)
+  active          Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  layoutConfig    LayoutConfig @relation(fields: [layoutConfigId], references: [id], onDelete: Cascade)
+
+  @@index([layoutConfigId])
+  @@index([pagePosition])
+}
+
+model LoginHistory {
+  id            String   @id @default(cuid())
+  userId        String
+  loginAt       DateTime @default(now())
+  ipAddress     String?
+  userAgent     String?  @db.Text
+  success       Boolean  @default(true)
+  failureReason String?  @db.Text
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([loginAt])
+  @@index([success])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  userId        String?  // Pode ser null para ações do sistema
+  action        String   // LOGIN, LOGOUT, CREATE_USER, UPDATE_USER, DELETE_USER, APPROVE_PROPOSAL, etc.
+  resourceType  String?  // User, Proposal, Service, etc.
+  resourceId    String?  // ID do recurso afetado
+  details       String?  @db.Text // JSON com detalhes adicionais
+  ipAddress     String?
+  userAgent     String?  @db.Text
+  timestamp     DateTime @default(now())
+  
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@index([resourceType])
+}
+
+// ===================================
+// FINANCIAL MANAGEMENT MODELS
+// ===================================
+
+model Installment {
+  id              String    @id @default(cuid())
+  proposalId      String
+  installmentNumber Int     // Número da parcela (1, 2, 3...)
+  dueDate         DateTime  // Data de vencimento
+  amount          Decimal   @db.Decimal(10, 2)  // Valor da parcela
+  status          String    @default("pending") // pending, paid, overdue, cancelled
+  description     String?   @db.Text
+  
+  // Relações
+  proposal        Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  payments        Payment[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([proposalId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  installmentId   String
+  amount          Decimal   @db.Decimal(10, 2)  // Valor pago
+  paymentDate     DateTime  // Data do pagamento
+  paymentMethod   String?   // Método de pagamento (transferência, cartão, etc.)
+  notes           String?   @db.Text
+  receipt         String?   // Cloud storage path do comprovante de pagamento
+  
+  // Relações
+  installment     Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([installmentId])
+  @@index([paymentDate])
+}
+
+// ===================================
+// HR CONTRACT MANAGEMENT MODELS
+// ===================================
+
+model HRContract {
+  id                    String    @id @default(cuid())
+  contractNumber        String    @unique  // Número único do contrato (ex: CONT-2025-0001)
+  userId                String    // Usuário que criou o contrato
+  
+  // Dados da CONTRATADA (Prestador de Serviço)
+  contractorName        String    // Nome completo da pessoa (ex: MARLOS VELASCO LUZ)
+  contractorCPF         String    // CPF do prestador
+  contractorCNPJ        String?   // CNPJ (opcional, se for PJ)
+  contractorAddress     String    @db.Text  // Endereço completo com CEP
+  
+  // Dados do Representante Legal da CONTRATADA (mesmo que o prestador se for ele o sócio)
+  representativeName    String    // Nome do representante legal
+  representativeCPF     String    // CPF do representante
+  
+  // Escopo do serviço
+  serviceScope          String?   @db.Text  // Descrição do escopo do serviço prestado
+  
+  // Dados financeiros
+  monthlyValue          Decimal   @db.Decimal(10, 2)  // Valor mensal (R$)
+  
+  // Dados do contrato
+  startDate             DateTime  // Data de início do contrato
+  duration              Int       @default(12)  // Duração em meses (padrão 12)
+  
+  // Status
+  status                String    @default("active")  // active, terminated, expired
+  
+  // Dados de geração do PDF
+  contractPath          String?   // Cloud storage path do contrato PDF gerado
+  generatedAt           DateTime? // Data/hora da geração do PDF
+  
+  // Assinatura
+  signatureMethod       String?   // govbr, platform, manual
+  signaturePlatform     String?   // Clicksign, DocuSign, etc (se platform)
+  signedAt              DateTime? // Data de assinatura
+  
+  // Metadados
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  @@index([contractNumber])
+  @@index([contractorName])
+  @@index([userId])
+  @@index([status])
+}
+
+// ===================================
+// FIXED COSTS MANAGEMENT
+// ===================================
+
+model FixedCost {
+  id              String    @id @default(cuid())
+  userId          String    // Usuário que cadastrou
+  
+  // Dados do custo
+  name            String    // Nome do custo (ex: "Aluguel Escritório", "Salário Fulano")
+  category        String    // Categoria: salario, aluguel, servico, impostos, outros
+  description     String?   @db.Text
+  
+  // Valores
+  amount          Decimal   @db.Decimal(10, 2)  // Valor mensal
+  dueDay          Int       @default(10)        // Dia do vencimento mensal (1-28)
+  
+  // Período de vigência
+  startDate       DateTime  // Data de início
+  endDate         DateTime? // Data de término (null = indefinido)
+  
+  // Vinculação com contrato RH (opcional)
+  hrContractId    String?   @unique  // Se veio de um contrato RH
+  
+  // Status
+  isActive        Boolean   @default(true)
+  
+  // Metadados
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@index([category])
+  @@index([isActive])
+  @@index([startDate])
+}
+
+// ===================================
+// TAX CONFIGURATION
+// ===================================
+
+model TaxConfig {
+  id              String    @id @default(cuid())
+  userId          String    // Usuário que configurou
+  
+  // Configuração do imposto
+  taxPercent      Decimal   @db.Decimal(5, 2)  // Percentual do imposto (ex: 12.00)
+  description     String?   // Descrição/motivo da alteração
+  
+  // Período de vigência
+  effectiveFrom   DateTime  // Data de início da vigência
+  effectiveUntil  DateTime? // Data de término (null = vigente)
+  
+  // Status
+  isActive        Boolean   @default(true)
+  
+  // Metadados
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@index([isActive])
+  @@index([effectiveFrom])
+}
+
+// ===================================
+// FINANCIAL REPORTS
+// ===================================
+
+model FinancialReport {
+  id              String    @id @default(cuid())
+  userId          String    // Usuário destinatário
+  
+  // Período do relatório
+  periodStart     DateTime
+  periodEnd       DateTime
+  reportType      String    // weekly, monthly
+  
+  // Dados do relatório (JSON)
+  reportData      String    @db.Text  // JSON com todos os dados
+  
+  // Análise da IA
+  aiAnalysis      String?   @db.Text  // Análise gerada pela IA
+  aiRecommendations String? @db.Text  // Recomendações da IA
+  
+  // Envio
+  sentAt          DateTime?
+  sentToEmail     String?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([periodStart])
+  @@index([reportType])
+}
+
+// ===================================
+// CRM - GESTÃO DE RELACIONAMENTO
+// ===================================
+
+model CRMClient {
+  id              String    @id @default(cuid())
+  userId          String    // Usuário dono do cliente
+  
+  // Dados do cliente
+  name            String
+  email           String
+  phone           String?
+  company         String?
+  cnpj            String?
+  
+  // Status do relacionamento
+  status          String    @default("lead") // lead, prospect, active, inactive, lost
+  source          String?   // Origem: proposal, manual, referral
+  
+  // Dados de proposta vinculada
+  proposalId      String?   // Última proposta relacionada
+  proposalStatus  String?   // Status da proposta
+  proposalValue   Decimal?  @db.Decimal(10, 2)
+  
+  // Métricas de engajamento
+  lastContactAt   DateTime?
+  nextFollowUpAt  DateTime?
+  totalInteractions Int     @default(0)
+  
+  // Tags e notas
+  tags            String?   // Tags separadas por vírgula
+  notes           String?   @db.Text
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  interactions    CRMInteraction[]
+  followUps       CRMFollowUp[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([email])
+  @@index([nextFollowUpAt])
+}
+
+model CRMInteraction {
+  id              String    @id @default(cuid())
+  clientId        String
+  userId          String
+  
+  // Tipo de interação
+  type            String    // email, whatsapp, phone, meeting, note
+  direction       String    @default("outbound") // inbound, outbound
+  
+  // Conteúdo
+  subject         String?
+  content         String    @db.Text
+  
+  // Status
+  status          String    @default("sent") // draft, sent, delivered, read, replied
+  
+  // IA
+  aiGenerated     Boolean   @default(false)
+  aiPromptUsed    String?   @db.Text
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relações
+  client          CRMClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@index([clientId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model CRMFollowUp {
+  id              String    @id @default(cuid())
+  clientId        String
+  userId          String
+  
+  // Dados do follow-up
+  title           String
+  description     String?   @db.Text
+  dueDate         DateTime
+  
+  // Status
+  status          String    @default("pending") // pending, completed, cancelled
+  priority        String    @default("normal") // low, normal, high, urgent
+  
+  // Resultado
+  completedAt     DateTime?
+  outcome         String?   @db.Text
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  client          CRMClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@index([clientId])
+  @@index([userId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model CRMMessageTemplate {
+  id              String    @id @default(cuid())
+  userId          String
+  
+  // Template
+  name            String
+  category        String    // follow_up, proposal_sent, proposal_reminder, thank_you, reactivation
+  subject         String?
+  content         String    @db.Text
+  
+  // Variáveis disponíveis
+  variables       String?   // JSON com variáveis disponíveis
+  
+  // Status
+  isActive        Boolean   @default(true)
+  usageCount      Int       @default(0)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@index([category])
+}
+// ===================================
+// CREATIVE MANAGEMENT (KANBAN)
+// ===================================
+
+model CreativeJob {
+  id              String    @id @default(cuid())
+  
+  // Vinculação
+  userId          String    // Usuário que criou
+  proposalId      String?   // Proposta vinculada (opcional)
+  
+  // Dados básicos
+  jobNumber       String    @unique  // Número sequencial do job (ex: JOB-2026-0001)
+  title           String    // Nome/título do trabalho
+  
+  // Cliente
+  clientName      String
+  clientEmail     String?
+  clientWhatsapp  String?
+  clientCompany   String?
+  
+  // Configurações de notificação
+  notifyClient    Boolean   @default(false)
+  
+  // Status e fluxo
+  status          String    @default("briefing")  // briefing, analysis, creation, adjustments, approval, completed
+  priority        String    @default("normal")     // low, normal, high, urgent
+  
+  // Responsável principal (manter para compatibilidade)
+  assignedTo      String?   // ID do designer responsável principal
+  assignedName    String?   // Nome do responsável principal (para exibição)
+  
+  // Prazos
+  deadline        DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  // Observações
+  internalNotes   String?   @db.Text
+  
+  // Metadados
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  proposal        Proposal? @relation(fields: [proposalId], references: [id])
+  services        CreativeJobService[]
+  checklist       CreativeJobChecklist[]
+  history         CreativeJobHistory[]
+  briefings       CreativeBriefing[]
+  assignees       CreativeJobAssignee[]  // Múltiplos responsáveis
+  comments        CreativeJobComment[]   // Comentários do job
+  attachments     CreativeJobAttachment[] // Anexos do job
+  
+  @@index([userId])
+  @@index([proposalId])
+  @@index([status])
+  @@index([assignedTo])
+  @@index([deadline])
+}
+
+// Modelo para múltiplos responsáveis por job
+model CreativeJobAssignee {
+  id              String    @id @default(cuid())
+  jobId           String
+  userId          String
+  userName        String    // Nome do usuário (para exibição rápida)
+  role            String    @default("member") // lead, member - líder ou membro
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relações
+  job             CreativeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  @@unique([jobId, userId])
+  @@index([jobId])
+  @@index([userId])
+}
+
+model CreativeJobService {
+  id              String    @id @default(cuid())
+  jobId           String
+  serviceId       String
+  
+  // Dados do serviço (snapshot no momento da criação)
+  serviceName     String
+  quantity        Int       @default(1)
+  
+  // Status específico do serviço no job
+  status          String    @default("pending")  // pending, in_progress, completed
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relações
+  job             CreativeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  @@index([jobId])
+  @@index([serviceId])
+}
+
+model CreativeJobChecklist {
+  id              String    @id @default(cuid())
+  jobId           String
+  
+  // Item do checklist
+  title           String
+  description     String?
+  isCompleted     Boolean   @default(false)
+  completedAt     DateTime?
+  completedBy     String?   // ID do usuário que completou
+  completedByName String?   // Nome do usuário que completou
+  
+  // Responsável pela tarefa
+  assignedToId    String?   // ID do responsável pela tarefa
+  assignedToName  String?   // Nome do responsável pela tarefa
+  
+  // Prazo da tarefa
+  dueDate         DateTime?
+  
+  // Ordem
+  order           Int       @default(0)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  job             CreativeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  @@index([jobId])
+  @@index([assignedToId])
+}
+
+model CreativeJobHistory {
+  id              String    @id @default(cuid())
+  jobId           String
+  userId          String
+  
+  // Dados da movimentação
+  action          String    // created, status_changed, assigned, deadline_updated, note_added, checklist_updated
+  previousValue   String?   // Valor anterior (ex: status antigo)
+  newValue        String?   // Novo valor (ex: novo status)
+  description     String?   // Descrição da ação
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relações
+  job             CreativeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  @@index([jobId])
+  @@index([createdAt])
+}
+
+model CreativeBriefing {
+  id              String    @id @default(cuid())
+  jobId           String
+  
+  // Tipo de briefing
+  briefingType    String    // branding, embalagem, social_media, campanha, video, outros
+  
+  // Conteúdo do briefing (JSON estruturado com perguntas e respostas)
+  content         String    @db.Text  // JSON
+  
+  // Status
+  isComplete      Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  job             CreativeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  @@index([jobId])
+  @@index([briefingType])
+}
+
+// Template de briefing (estrutura padrão por tipo de serviço)
+model BriefingTemplate {
+  id              String    @id @default(cuid())
+  
+  // Tipo
+  briefingType    String    @unique  // branding, embalagem, social_media, campanha, video, outros
+  name            String    // Nome amigável
+  
+  // Estrutura (JSON com seções e perguntas)
+  structure       String    @db.Text  // JSON
+  
+  // Status
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ===================================
+// CREATIVE JOB COMMENTS
+// ===================================
+
+model CreativeJobComment {
+  id              String    @id @default(cuid())
+  jobId           String
+  userId          String
+  userName        String    // Nome do usuário (para exibição rápida)
+  userImage       String?   // Avatar do usuário
+  
+  // Conteúdo
+  content         String    @db.Text
+  
+  // Menções (JSON array de userIds mencionados)
+  mentions        String?   // JSON array
+  
+  // Anexo vinculado (opcional)
+  attachmentId    String?
+  
+  // Editado
+  isEdited        Boolean   @default(false)
+  editedAt        DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  job             CreativeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  attachment      CreativeJobAttachment? @relation(fields: [attachmentId], references: [id])
+  
+  @@index([jobId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ===================================
+// CREATIVE JOB ATTACHMENTS
+// ===================================
+
+model CreativeJobAttachment {
+  id              String    @id @default(cuid())
+  jobId           String
+  userId          String
+  userName        String    // Nome de quem fez upload
+  
+  // Dados do arquivo
+  fileName        String    // Nome original do arquivo
+  fileType        String    // MIME type
+  fileSize        Int       // Tamanho em bytes
+  cloudStoragePath String   // Caminho no S3
+  
+  // Thumbnail (para imagens)
+  thumbnailPath   String?
+  
+  // Categoria
+  category        String    @default("general") // general, reference, delivery, feedback
+  
+  // Descrição
+  description     String?
+  
+  // Versão (para controle de versões de arquivos)
+  version         Int       @default(1)
+  parentId        String?   // ID do arquivo original (se for uma nova versão)
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relações
+  job             CreativeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  comments        CreativeJobComment[]
+  
+  @@index([jobId])
+  @@index([userId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+// ===================================
+// TEAM MANAGEMENT
+// ===================================
+
+model TeamMember {
+  id              String    @id @default(cuid())
+  userId          String    @unique  // Vinculado ao User
+  
+  // Dados profissionais
+  jobTitle        String?   // Cargo (ex: Designer Sênior, Diretor de Arte)
+  department      String?   // Departamento (Criação, Atendimento, etc.)
+  skills          String?   // JSON array de habilidades
+  
+  // Capacidade de trabalho
+  weeklyHours     Int       @default(40)  // Horas semanais disponíveis
+  maxConcurrentJobs Int     @default(5)   // Máximo de jobs simultâneos
+  
+  // Contato
+  phone           String?
+  whatsapp        String?
+  
+  // Data de entrada
+  startDate       DateTime  @default(now())
+  
+  // Cor para calendário/kanban
+  color           String    @default("#f88910")
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  absences        TeamAbsence[]
+  workloadHistory TeamWorkloadHistory[]
+  
+  @@index([userId])
+  @@index([department])
+}
+
+model TeamAbsence {
+  id              String    @id @default(cuid())
+  teamMemberId    String
+  
+  // Tipo de ausência
+  type            String    // vacation, sick_leave, personal, holiday, other
+  
+  // Período
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Detalhes
+  reason          String?   @db.Text
+  isApproved      Boolean   @default(false)
+  approvedBy      String?   // ID do usuário que aprovou
+  approvedAt      DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  teamMember      TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  
+  @@index([teamMemberId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([type])
+}
+
+model TeamWorkloadHistory {
+  id              String    @id @default(cuid())
+  teamMemberId    String
+  
+  // Período
+  weekStart       DateTime
+  weekEnd         DateTime
+  
+  // Métricas
+  assignedJobs    Int       @default(0)
+  completedJobs   Int       @default(0)
+  hoursWorked     Decimal   @db.Decimal(5, 2) @default(0)
+  
+  // Calculado
+  utilizationRate Decimal   @db.Decimal(5, 2) @default(0)  // % de capacidade utilizada
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relações
+  teamMember      TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  
+  @@unique([teamMemberId, weekStart])
+  @@index([teamMemberId])
+  @@index([weekStart])
+}
+
+// ===================================
+// EMAIL NOTIFICATIONS CONFIG
+// ===================================
+
+model EmailNotificationConfig {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  
+  // Tipos de notificação habilitados
+  proposalApproved      Boolean @default(true)
+  proposalRejected      Boolean @default(true)
+  proposalExpiring      Boolean @default(true)
+  jobAssigned           Boolean @default(true)
+  jobDeadlineApproaching Boolean @default(true)
+  installmentDue        Boolean @default(true)
+  installmentOverdue    Boolean @default(true)
+  teamAbsenceRequest    Boolean @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relações
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+// ===================================
+// METAS E KPIs
+// ===================================
+
+model Goal {
+  id              String    @id @default(cuid())
+  userId          String    // Quem criou a meta
+  
+  // Dados da meta
+  title           String
+  description     String?
+  type            String    // revenue, proposals, jobs, clients, conversion
+  targetValue     Decimal   @db.Decimal(15, 2)
+  currentValue    Decimal   @default(0) @db.Decimal(15, 2)
+  
+  // Período
+  period          String    // monthly, quarterly, yearly, custom
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Status
+  status          String    @default("active") // active, completed, cancelled
+  isAchieved      Boolean   @default(false)
+  achievedAt      DateTime?
+  
+  // Configurações
+  isPublic        Boolean   @default(false) // Visível para toda equipe
+  notifyOnProgress Boolean  @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+// ===================================
+// ALERTAS E NOTIFICAÇÕES INTERNAS
+// ===================================
+
+model Alert {
+  id              String    @id @default(cuid())
+  userId          String    // Destinatário do alerta
+  
+  // Dados do alerta
+  title           String
+  message         String    @db.Text
+  type            String    // info, warning, success, error
+  category        String    // proposal, job, financial, team, goal, system
+  
+  // Referência ao item relacionado
+  referenceId     String?   // ID da proposta, job, etc
+  referenceType   String?   // proposal, job, installment, etc
+  actionUrl       String?   // URL para ação
+  
+  // Status
+  isRead          Boolean   @default(false)
+  readAt          DateTime?
+  isDismissed     Boolean   @default(false)
+  dismissedAt     DateTime?
+  
+  // Expiração
+  expiresAt       DateTime?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([category])
+  @@index([createdAt])
+}
