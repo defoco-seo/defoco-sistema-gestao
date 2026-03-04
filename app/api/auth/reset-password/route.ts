@@ -147,11 +147,10 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Enviar email de confirmação
     const emailHtml = getPasswordChangedTemplate({
-      userName: user.name || 'Usuário',
-      changeDate: format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
-    });
+        userName: user.name || 'Usuário',
+        changedAt: format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+      });
 
     await sendEmail({
       to: user.email!,
