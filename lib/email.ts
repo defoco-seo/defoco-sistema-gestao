@@ -86,3 +86,39 @@ export function getPasswordResetTemplate(data: {
     </div>
   `;
 }
+
+export function getPasswordChangedTemplate(data: {
+  userName: string;
+  changedAt: string;
+}) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      
+      <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">
+          ✅ Senha Alterada com Sucesso
+        </h1>
+      </div>
+
+      <div style="background: #f9fafb; padding: 30px;">
+        <h2 style="color: #333; margin-top: 0;">
+          Olá, ${data.userName}!
+        </h2>
+
+        <p style="color: #666; font-size: 16px; line-height: 1.6;">
+          Sua senha foi alterada com sucesso em ${data.changedAt}.
+        </p>
+
+        <p style="color: #666; font-size: 16px; line-height: 1.6;">
+          Se você não realizou essa alteração, recomendamos redefinir sua senha imediatamente.
+        </p>
+      </div>
+
+      <div style="background: #1f2937; padding: 20px; text-align: center;">
+        <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+          © ${new Date().getFullYear()} Defoco. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+  `;
+}
