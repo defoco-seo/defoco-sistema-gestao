@@ -89,7 +89,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Construir link de reset
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://defoco.abacusai.app';
+    // const baseUrl = process.env.NEXTAUTH_URL || 'https://defoco.abacusai.app';
+    // const resetLink = `${baseUrl}/redefinir-senha/${rawToken}`;
+
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://sistema.defoco.com.br';
     const resetLink = `${baseUrl}/redefinir-senha/${rawToken}`;
 
     // Enviar email
