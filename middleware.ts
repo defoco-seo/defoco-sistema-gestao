@@ -6,13 +6,15 @@ import type { NextRequest } from 'next/server';
 const publicRoutes = [
   '/login',
   '/signup',
-  '/proposta', // Página pública de visualização de proposta
-  '/portal', // Portal do cliente (público)
+  '/forgot-password',
+  '/reset-password',
+  '/proposta',
+  '/portal',
   '/api/auth',
   '/api/signup',
   '/api/proposals/public',
-  '/api/client-portal', // API do portal do cliente
-  '/api/financial/calendar', // Usa token próprio
+  '/api/client-portal',
+  '/api/financial/calendar',
   '/_next',
   '/favicon',
   '/logo',
