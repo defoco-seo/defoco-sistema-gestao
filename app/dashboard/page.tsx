@@ -80,7 +80,7 @@ export default async function DashboardPage() {
             Olá, {session.user.name}!
           </h1>
           <p className="text-gray-600 mt-1">
-            Bem-vindo ao sistema de propostas comerciais Defoco
+            Bem-vindo ao sistema de propostas comerciais Defoco**
           </p>
         </div>
         <Link href="/dashboard/propostas/criar">
