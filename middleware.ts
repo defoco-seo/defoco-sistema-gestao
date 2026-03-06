@@ -8,6 +8,7 @@ const publicRoutes = [
   '/signup',
   '/forgot-password',
   '/reset-password',
+  '/redefinir-senha',
   '/proposta',
   '/portal',
   '/api/auth',
