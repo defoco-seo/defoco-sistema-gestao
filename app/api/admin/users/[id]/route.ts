@@ -8,7 +8,7 @@ import { isMasterUser, createAuditLog } from '@/lib/auth-helpers';
 import bcrypt from 'bcryptjs';
 
 interface RouteContext {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 /**
@@ -20,7 +20,7 @@ export async function GET(
   context: RouteContext
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = context.params;
 
     // Verifica se é Master User
     const isMaster = await isMasterUser();
@@ -88,7 +88,7 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = context.params;
 
     // Verifica se é Master User
     const isMaster = await isMasterUser();
@@ -228,6 +228,12 @@ export async function PATCH(
       }
     });
   } catch (error) {
+
+    console.error('Erro ao atualizar usuário:', {
+      error,
+      message: error instanceof Error ? error.message : error
+    });
+
     console.error('Erro ao atualizar usuário:', error);
     return NextResponse.json(
       { error: 'Erro ao atualizar usuário' },
@@ -245,7 +251,7 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = context.params;
 
     // Verifica se é Master User
     const isMaster = await isMasterUser();
