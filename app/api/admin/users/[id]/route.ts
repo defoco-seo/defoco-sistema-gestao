@@ -316,8 +316,14 @@ export async function DELETE(
     return NextResponse.json({
       message: 'Usuário removido com sucesso'
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao remover usuário:', error);
+
+      console.error('ERRO COMPLETO DELETE USER');
+       console.error(error);
+       console.error(error?.message);
+       console.error(error?.stack);
+    
     return NextResponse.json(
       { error: 'Erro ao remover usuário' },
       { status: 500 }
