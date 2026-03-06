@@ -284,9 +284,24 @@ export async function DELETE(
     }
 
     // Remove usuário
-    await prisma.user.delete({
-      where: { id }
-    });
+    // await prisma.user.delete({
+    //   where: { id }
+    // });
+
+
+    // Remove dependências antes de excluir o usuário
+      await prisma.loginHistory.deleteMany({
+        where: { userId: id }
+      });
+
+      await prisma.proposal.deleteMany({
+        where: { userId: id }
+      });
+
+      // Agora remove o usuário
+      await prisma.user.delete({
+        where: { id }
+      });
 
     // Log de auditoria
     await createAuditLog({
